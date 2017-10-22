@@ -1,38 +1,30 @@
-module quadrant( input  clock, 
-				 input  clear, 
-				 input  wire[15:0] a, 
-				 input  wire[15:0] filter, 
-				 output reg [15:0] c 
-	           );
+// synposys translate_off
+`include "/afs/eos.ncsu.edu/dist/syn2013.03/dw/sim_ver/DW02_mac.v"
 
-wire [31:0] data_out_wo_truncate;
-reg  [31:0] acc_data_in_mac;
-wire [15:0] c_unregistered;
+// synposys translate_on
+module quadrant( 
+   input  clock, 
+   input  clear, 
+   input  wire[15:0] a, 
+   input  wire[15:0] b, 
+   output wire[15:0] out 
+);
 
-// Unsynthesizable emulation of MAC
-task dw_mac;
-	input  wire signed [15:0] a;
-	input  wire signed [15:0] b;
-	input  wire signed [31:0] acc;
-	output wire signed [31:0] acc_out;
-	acc_out = acc + a*b;
-endtask
+wire        tc;
+reg  [31:0] data_out_wo_truncate;
+wire [31:0] data_in;
+wire [31:0] mac;
 
-//TODO: study the effect of removing acc_data_in_mac from register
-always@(posedge clock) begin //{
-	if( clear ) begin //{
-		acc_data_in_mac <= 0;
-		c               <= 0;
-	end //}
-	else begin //{
-		acc_data_in_mac <= data_out_wo_truncate;
-		c               <= c_unregistered;
-	end //}
-end //}
+assign tc   = 1'b1;
+
+always@(posedge clock)
+   data_out_wo_truncate <= mac;
 
 // truncate logic
-assign c_unregistered = ( data_out_wo_truncate[31] ) ? 16'b0 : data_out_wo_truncate[31:16];
+assign out     = ( data_out_wo_truncate[31] ) ? 16'b0 : data_out_wo_truncate[31:16];
+// Reset logic
+assign data_in = ( clear ) ? 32'b0 : data_out_wo_truncate;
 
-dw_mac( a, filter, acc_data_in_mac, data_out_wo_truncate );
+DW02_mac #( .A_width(16), .B_width(16) ) mac0 ( .A(a), .B(b), .C(data_in), .MAC(mac), .TC(tc) );
 
 endmodule

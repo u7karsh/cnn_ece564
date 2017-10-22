@@ -676,9 +676,9 @@ class generator;
       begin
         for (int x=0; x<64; x++)
           begin
-            addr = y*'h10+x+'h40;
+            addr = y*'h40+x+'h40;
             DutIfc.loadRam(1,addr,op.mVectors[y][x]); 
-            //$display("@%t: DEBUG: Load m-vectors: Row=%0d, Col=%0d, addr=%4h, data=%4h",  $time, y, x, addr, op.mVectors[y][x]);
+            //$display("@%t: DEBUG: Load m-vectors: Row=%0d, Col=%0d, addr=%h, data=%6d",  $time, y, x, addr, op.mVectors[y][x]);
           end
       end
 
@@ -1071,7 +1071,6 @@ module dut (
   
   cnn u1( .clock(clk), .reset(reset | xxx__dut__go), .bvm_address(dut__bvm__address), .dim_address(dut__dim__address), .dim_data_unreg(dim__dut__data),. bvm_data_unreg(bvm__dut__data) );
 
-  
   // 
   //---------------------------------------------------------------------------
 
