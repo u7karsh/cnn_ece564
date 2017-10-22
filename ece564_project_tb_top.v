@@ -625,7 +625,7 @@ class generator;
 
   // Temp
   logic [ 8:0] tmp_dim_addr        ;
-  logic [ 8:0] tmp_bvm_addr        ;
+  logic [ 9:0] tmp_bvm_addr        ;
   logic [ 2:0] tmp_dom_addr        ;
   logic [ 7:0] tmp_inputArray_addr ;
   logic [15:0] tmp_dom_data        ;
@@ -678,7 +678,7 @@ class generator;
           begin
             addr = y*'h40+x+'h40;
             DutIfc.loadRam(1,addr,op.mVectors[y][x]); 
-            //$display("@%t: DEBUG: Load m-vectors: Row=%0d, Col=%0d, addr=%h, data=%6d",  $time, y, x, addr, op.mVectors[y][x]);
+            //$display("@%t: DEBUG: Load m-vectors: Row=%0d, Col=%0d, addr=%4h, data=%4h",  $time, y, x, addr, op.mVectors[y][x]);
           end
       end
 
@@ -708,17 +708,17 @@ class generator;
               begin
                 tmp_dom_addr = DutIfc.cb_test.dut__dom__address ;
                 tmp_dom_data = DutIfc.cb_test.dut__dom__data    ;
-                $display("@%t: INFO: Output Memory Write, addr=%h", $time, tmp_dom_addr);
-                $display("@%t: INFO: Output Value for element {%0d} = %h", $time, tmp_dom_addr, tmp_dom_data);
+                //$display("@%t: INFO: Output Memory Write, addr=%h", $time, tmp_dom_addr);
+                //$display("@%t: INFO: Output Value for element {%0d} = %h", $time, tmp_dom_addr, tmp_dom_data);
                 if (($signed(tmp_dom_data)  >  op.outputArray[tmp_dom_addr]+op.tolerance) | ($signed(tmp_dom_data)  <  op.outputArray[tmp_dom_addr]-op.tolerance))
                   begin
                     op.outputStatus[tmp_dom_addr] = 1'b0 ;
-                    $display("@%t: ERROR: Output Memory Write, writing %h, expecting %h, tolerance = %0d, output status=%8b", $time, tmp_dom_data, op.outputArray[tmp_dom_addr], op.tolerance, op.outputStatus);
+                    //$display("@%t: ERROR: Output Memory Write, writing %h, expecting %h, tolerance = %0d, output status=%8b", $time, tmp_dom_data, op.outputArray[tmp_dom_addr], op.tolerance, op.outputStatus);
                   end
                 else
                   begin
                     op.outputStatus[tmp_dom_addr] = 1'b1 ;
-                    $display("@%t: PASS: Output Memory Write, writing %h, expecting %h, output status=%8b", $time, tmp_dom_data, op.outputArray[tmp_dom_addr], op.outputStatus);
+                    //$display("@%t: PASS: Output Memory Write, writing %h, expecting %h, output status=%8b", $time, tmp_dom_data, op.outputArray[tmp_dom_addr], op.outputStatus);
                   end
               end
           end
@@ -728,8 +728,8 @@ class generator;
         forever 
           begin
             @(DutIfc.cb_test);
-            if (DutIfc.cb_test.dut__xxx__finish)
-              begin
+            wait(DutIfc.cb_test.dut__xxx__finish)
+
                 $display("@%t: INFO: Start", $time);
                 @(DutIfc.cb_test);
                 @(DutIfc.cb_test);
@@ -738,13 +738,15 @@ class generator;
                 DutIfc.xxx__dut__go  =  0;
                 @(DutIfc.cb_test);
                 tId++ ;
+            // DUT may not deassert finish right away
+            while(DutIfc.cb_test.dut__xxx__finish)
+              begin
+                @(DutIfc.cb_test);
               end
             while(~DutIfc.cb_test.dut__xxx__finish)
               begin
                 @(DutIfc.cb_test);
               end
-            if (tId == max_ops)
-              begin
                 $display("@%t: INFO: Done", $time);
                 if (|(~op.outputStatus))
                   begin
@@ -754,7 +756,10 @@ class generator;
                   begin
                     $display("@%t: PASS: Output array status: %8b", $time, op.outputStatus);
                   end
-                break;
+
+            if (tId == max_ops)
+              begin
+                $finish;
               end
             //check();
           end 
@@ -904,7 +909,7 @@ module tb_top ();
 
       );
 
-  sram  #(.ADDR_WIDTH  ( 10),
+  sram  #(.ADDR_WIDTH  (10),
           .DATA_WIDTH  (16))
          bvm_mem  (
           .address      ( dut_if.dut__bvm__address  ),
@@ -1062,14 +1067,15 @@ module dut (
   //<<<<----  YOUR CODE HERE    ---->>>>
   //
   
-  always@(*) begin
+  always@(posedge clk) begin
 	dut__bvm__enable = 1;
 	dut__bvm__write  = 0;
 	dut__dim__enable = 1;
 	dut__dim__write  = 0;
+	dut__dom__enable = 1;
   end
   
-  cnn u1( .clock(clk), .reset(reset | xxx__dut__go), .bvm_address(dut__bvm__address), .dim_address(dut__dim__address), .dim_data_unreg(dim__dut__data),. bvm_data_unreg(bvm__dut__data) );
+  cnn u1( .clock(clk), .reset(reset), .go(xxx__dut__go), .finish(dut__xxx__finish), .bvm_address(dut__bvm__address), .dim_address(dut__dim__address), .dim_data_unreg(dim__dut__data),. bvm_data_unreg(bvm__dut__data), .dom_data(dut__dom__data), .dom_address(dut__dom__address), .dom_ready(dut__dom__write) );
 
   // 
   //---------------------------------------------------------------------------

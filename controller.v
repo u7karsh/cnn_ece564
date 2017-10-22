@@ -1,9 +1,13 @@
 module controller( 
    input  wire       clock,         // Posedge sampling event
    input  wire       reset,         // Synchronous active high
+   input  wire       go,
+   output reg        finish,
    output wire [3:0] i,             // Pixel address
    output wire [3:0] j,             // Pixel address
    output reg  [1:0] layer,         // Filter address
+   output reg  [2:0] dom_address,   // dom address runs one clock delayed as compared to others as it is write. add a FF
+   output reg        dom_ready,
    output reg        wen,           // Storing/Using filter in/from register file *only*. 1 => store, 0 => retrieve
    output reg  [1:0] quad_select,   // Control signal for 4 modules on each quadrant
    output reg  [9:0] bvm_address,
@@ -30,34 +34,35 @@ reg  [2:0] next_sub_quad_select;
 reg  [2:0] next_quad_select;
 reg  [2:0] next_layer;
 reg  [3:0] partial_i, partial_j;
-wire        wen_next;
-wire        store_look_ahead_filter;
-wire [2:0]  look_ahead_filter_addr;
-reg  [2:0]  look_ahead_filter_addr_plus_one;
-reg  [3:0]  step;
-reg  [5:0]  look_ahead_lower_addr;
+wire       wen_next;
+wire       store_look_ahead_filter;
+wire [2:0] look_ahead_filter_addr;
+reg  [2:0] look_ahead_filter_addr_plus_one;
+reg  [3:0] step;
+reg  [3:0] step_reg;
+reg  [5:0] look_ahead_lower_addr;
+reg        next_process_started, process_started;
 //----------------------- INTERNAL SIGNALS ENDS -------------------------------
 
 // i,j index vars to be fed as address
 // They need not be registerd as they will directly get attached
 // to a reg on the module instantiating controller
+// Adders for 1, j are required
 assign i                       = partial_i + {2'b00, sub_quad_row};
 assign j                       = partial_j + {2'b00, sub_quad_col};
 assign wen_next                = &(~{quad_select_int, sub_quad_select});
 assign store_look_ahead_filter = quad_select_int[1] & next_quad_row[2];
 assign look_ahead_filter_addr  = {quad_select_int[0], sub_quad_select};
 
-//assign next_ready_3_3   = reset ? 1'b1 : next_quad_row[2];
-//TODO: Do an analysis on timing as it is async
-
 //---------------------------- SYNC LOGIC BEGINS ------------------------------
 always@( posedge clock ) begin //{
-   if( reset ) begin //{
+   if( reset | ~process_started ) begin //{
       quad_select_int         <= 0;
       sub_quad_select         <= 0;
       sub_quad_col            <= 0;
       {new_3b, sub_quad_row}  <= 3'b100;
       layer                   <= 0;
+      finish                  <= 1;
    end //}
    else begin //{
       // Following signals are synced with i, j or address calculating logic
@@ -68,8 +73,10 @@ always@( posedge clock ) begin //{
       sub_quad_select         <= next_sub_quad_select[1:0];
       layer                   <= next_layer[1:0];
       quad_select_int         <= next_quad_select[1:0];
-
+      finish                  <= next_layer[2];
    end //}
+
+
 end //}
 
 // Interface signals
@@ -88,6 +95,10 @@ always@(posedge clock) begin //{
    store_la_filter     <= store_look_ahead_filter;
    subblock            <= sub_quad_select;
    step2_idx           <= {layer, next_step2_idx_lower_nibble};
+   process_started     <= next_process_started;
+   step_reg            <= step;
+   dom_address         <= step_reg[2:0];
+   dom_ready           <= ~step_reg[3];
 end //}
 //---------------------------- SYNC LOGIC ENDS --------------------------------
 
@@ -227,7 +238,16 @@ always@(*) begin //{
    endcase
 end //}
 
-// Add one to sub_quad
+always@(*) begin //{
+   casex( {reset, process_started, go, next_layer[2]} )
+      4'b0000: next_process_started = 1'b0;
+      4'b0xx1: next_process_started = 1'b0;
+      4'b1xxx: next_process_started = 1'b0;
+
+      4'b0x10: next_process_started = 1'b1;
+   endcase
+end //}
+
 always@(*)
    add_one_2bit( {next_quad_row[2], sub_quad_select}, next_sub_quad_select );
 
@@ -249,18 +269,18 @@ end //}
 // No need to register as this will go into register instantiating this module
 always@(*) begin //{
    case( {sub_quad_row, sub_quad_col} )
-      {2'd0, 2'd0} : step = 0;
-      {2'd0, 2'd1} : step = 1;
-      {2'd0, 2'd2} : step = 2;
+      {2'd0, 2'd0} : step = 4'd0; 
+      {2'd0, 2'd1} : step = 4'd1; 
+      {2'd0, 2'd2} : step = 4'd2; 
 
-      {2'd1, 2'd0} : step = 3;
-      {2'd1, 2'd1} : step = 4;
-      {2'd1, 2'd2} : step = 5;
+      {2'd1, 2'd0} : step = 4'd3; 
+      {2'd1, 2'd1} : step = 4'd4; 
+      {2'd1, 2'd2} : step = 4'd5; 
 
-      {2'd2, 2'd0} : step = 6;
-      {2'd2, 2'd1} : step = 7;
-      {2'd2, 2'd2} : step = 8;
-      default      : step = 0;
+      {2'd2, 2'd0} : step = 4'd6; 
+      {2'd2, 2'd1} : step = 4'd7; 
+      {2'd2, 2'd2} : step = 4'd8; 
+      default      : step = 4'd0; 
    endcase
 end //}
 //---------------------------- ASYNC LOGIC ENDS -------------------------------
