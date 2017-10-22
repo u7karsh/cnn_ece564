@@ -22,7 +22,7 @@ interface dut_ifc(
   //---------------------------------------------------------------------------
   // Filter-vector memory 
   //
-  logic   [ 8:0]          dut__bvm__address  ;
+  logic   [ 9:0]          dut__bvm__address  ;
   logic   [15:0]          dut__bvm__data     ;  // write data
   logic   [15:0]          bvm__dut__data     ;  // read data
   logic                   dut__bvm__enable   ;
@@ -857,7 +857,7 @@ module tb_top ();
 
   //---------------------------------------------------------------------------
   // b-vector memory 
-  wire [ 8:0]          dut__bvm__address  ;
+  wire [ 9:0]          dut__bvm__address  ;
   wire [15:0]          dut__bvm__data     ;  // write data
   wire [15:0]          bvm__dut__data     ;  // read data
   wire                 dut__bvm__enable   ;
@@ -904,7 +904,7 @@ module tb_top ();
 
       );
 
-  sram  #(.ADDR_WIDTH  ( 9),
+  sram  #(.ADDR_WIDTH  ( 10),
           .DATA_WIDTH  (16))
          bvm_mem  (
           .address      ( dut_if.dut__bvm__address  ),
@@ -1024,7 +1024,7 @@ module dut (
             //---------------------------------------------------------------------------
             // b-vector memory 
             //
-            output reg  [ 8:0]          dut__bvm__address  ,
+            output reg  [ 9:0]          dut__bvm__address  ,
             output reg                  dut__bvm__enable   ,
             output reg                  dut__bvm__write    ,
             output reg  [15:0]          dut__bvm__data     ,  // write data

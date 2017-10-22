@@ -6,7 +6,7 @@ module controller(
    output reg  [1:0] layer,         // Filter address
    output reg        wen,           // Storing/Using filter in/from register file *only*. 1 => store, 0 => retrieve
    output reg  [1:0] quad_select,   // Control signal for 4 modules on each quadrant
-   output reg  [8:0] bvm_address,
+   output reg  [9:0] bvm_address,
    output reg        ready_3_3,     // Marks completion of a 3x3 unit
    output reg        store_la_filter,
    output reg  [2:0] la_filter_addr,
@@ -22,6 +22,7 @@ reg  [1:0] sub_quad_row;
 reg  [1:0] quad_select_int;
 reg        new_3b;
 reg  [5:0] step2_idx;
+reg  [3:0] next_step2_idx_lower_nibble;
 
 // Async logic variables
 reg  [2:0] next_quad_row;
@@ -31,9 +32,10 @@ reg  [2:0] next_layer;
 reg  [3:0] partial_i, partial_j;
 wire        wen_next;
 wire        store_look_ahead_filter;
-reg  [2:0]  look_ahead_filter_addr;
+wire [2:0]  look_ahead_filter_addr;
 reg  [2:0]  look_ahead_filter_addr_plus_one;
 reg  [3:0]  step;
+reg  [5:0]  look_ahead_lower_addr;
 //----------------------- INTERNAL SIGNALS ENDS -------------------------------
 
 // i,j index vars to be fed as address
@@ -42,7 +44,8 @@ reg  [3:0]  step;
 assign i                       = partial_i + {2'b00, sub_quad_row};
 assign j                       = partial_j + {2'b00, sub_quad_col};
 assign wen_next                = &(~{quad_select_int, sub_quad_select});
-assign store_look_ahead_filter = quad_select_int[1];
+assign store_look_ahead_filter = quad_select_int[1] & next_quad_row[2];
+assign look_ahead_filter_addr  = {quad_select_int[0], sub_quad_select};
 
 //assign next_ready_3_3   = reset ? 1'b1 : next_quad_row[2];
 //TODO: Do an analysis on timing as it is async
@@ -55,8 +58,6 @@ always@( posedge clock ) begin //{
       sub_quad_col            <= 0;
       {new_3b, sub_quad_row}  <= 3'b100;
       layer                   <= 0;
-      // TODO:
-      step2_idx               <= 6'h3F;
    end //}
    else begin //{
       // Following signals are synced with i, j or address calculating logic
@@ -68,7 +69,6 @@ always@( posedge clock ) begin //{
       layer                   <= next_layer[1:0];
       quad_select_int         <= next_quad_select[1:0];
 
-      step2_idx               <= step2_idx + {4'b0, next_quad_row[2]}; 
    end //}
 end //}
 
@@ -84,10 +84,10 @@ always@(posedge clock) begin //{
    quad_select         <= quad_select_int;
    wen                 <= wen_next;
    ready_3_3           <= new_3b;
-   look_ahead_filter_addr <= store_look_ahead_filter ? look_ahead_filter_addr_plus_one : 3'b0;
-   la_filter_addr      <= look_ahead_filter_addr;
+   la_filter_addr      <= store_look_ahead_filter ? look_ahead_filter_addr : step;
    store_la_filter     <= store_look_ahead_filter;
    subblock            <= sub_quad_select;
+   step2_idx           <= {layer, next_step2_idx_lower_nibble};
 end //}
 //---------------------------- SYNC LOGIC ENDS --------------------------------
 
@@ -172,10 +172,44 @@ end //}
 // b vector address decoding logic
 always@(*) begin //{
    casex( {wen_next, store_look_ahead_filter} )
-      2'b10: bvm_address = {3'b000, layer, step};
+      2'b10: bvm_address = {4'b0000, layer, step};
       //TODO
-      2'b00: bvm_address = 9'h40 + {step, step2_idx};
-      2'bx1: bvm_address = {look_ahead_filter_addr, 6'd63};
+      2'b00: bvm_address = 10'h40 + {step, step2_idx};
+      2'bx1: bvm_address = 10'h40 + {1'b0, look_ahead_filter_addr, look_ahead_lower_addr};
+   endcase
+end //}
+
+always@(*) begin //{
+   case( layer )
+      2'd0 : look_ahead_lower_addr = 6'h0F;
+      2'd1 : look_ahead_lower_addr = 6'h1F;
+      2'd2 : look_ahead_lower_addr = 6'h2F;
+      2'd3 : look_ahead_lower_addr = 6'h3F;
+   endcase
+end //}
+
+// step2_idx decoder
+always@(*) begin //{
+   case( {next_quad_select[1:0], next_sub_quad_select[1:0]} )
+      4'b00_00: next_step2_idx_lower_nibble = 4'hF;
+      4'b00_01: next_step2_idx_lower_nibble = 4'h0;
+      4'b00_10: next_step2_idx_lower_nibble = 4'h1;
+      4'b00_11: next_step2_idx_lower_nibble = 4'h4;
+
+      4'b01_00: next_step2_idx_lower_nibble = 4'h5;
+      4'b01_01: next_step2_idx_lower_nibble = 4'h2;
+      4'b01_10: next_step2_idx_lower_nibble = 4'h3;
+      4'b01_11: next_step2_idx_lower_nibble = 4'h6;
+
+      4'b10_00: next_step2_idx_lower_nibble = 4'h7;
+      4'b10_01: next_step2_idx_lower_nibble = 4'h8;
+      4'b10_10: next_step2_idx_lower_nibble = 4'h9;
+      4'b10_11: next_step2_idx_lower_nibble = 4'hC;
+
+      4'b11_00: next_step2_idx_lower_nibble = 4'hD;
+      4'b11_01: next_step2_idx_lower_nibble = 4'hA;
+      4'b11_10: next_step2_idx_lower_nibble = 4'hB;
+      4'b11_11: next_step2_idx_lower_nibble = 4'hE;
    endcase
 end //}
 

@@ -1,7 +1,7 @@
 module cnn( 
    input             clock, 
    input             reset, 
-   output reg[8:0]   bvm_address, 
+   output reg[9:0]   bvm_address, 
    output reg[8:0]   dim_address, 
    input  wire[15:0] dim_data_unreg, 
    input  wire[15:0] bvm_data_unreg
@@ -14,7 +14,7 @@ wire [3:0]  i, j;
 wire [1:0]  layer;
 reg  [15:0] step1_filter;
 wire [15:0] dom_data;
-wire [8:0]  bvm_address_unreg;
+wire [9:0]  bvm_address_unreg;
 
 // Buffered outputs from controller which have to be further delayed by
 // 1 clock to sync with data which is 2 clocks delayed
@@ -40,7 +40,8 @@ reg  [1:0] subblock;
 reg  [15:0] out_3_3;
 wire [15:0] out0, out1, out2, out3;
 wire [15:0] reg_read_data;
-reg  [15:0] step2_input;
+reg  [15:0] step2_input_stasher;
+wire [15:0] step2_input;
 reg  [31:0] step2_reg_input;
 wire [15:0] step2_filter;
 wire [31:0] step2_output;
@@ -49,6 +50,7 @@ wire        tc;
 assign tc            = 1'b1;
 assign dom_data      = ( step2_output[31] ) ? 16'b0 : step2_output[31:16];
 assign step2_filter  = (quad_select==0 & subblock==0) ? la_reg_out : bvm_data;
+assign step2_input   = ready_3_3 ? out_3_3 : step2_input_stasher;
 
 // Interface register *mandatory*
 always@(posedge clock) begin //{
@@ -70,7 +72,7 @@ always@(posedge clock) begin //{
    subblock         <= subblock_unreg;
 
    if( ready_3_3 )
-      step2_input   <= out_3_3;
+      step2_input_stasher   <= out_3_3;
 end //}
 
 always@(*) begin
@@ -116,7 +118,7 @@ sr_siso9   #(.WIDTH(32))
 
 register_file_9x16 r0 ( .clock(clock), .wen(store_la_filter), .address({1'b0,la_filter_addr}), .write_bus(bvm_data), .read_bus(la_reg_out) );
 initial begin
-   $monitor("[%0t] %d %d %d [%x %6d] [%d %6d] [%x %6d] %d %d %d %d %d %x", $time, reset, i, j, dim_address, dim_data, c0.step, bvm_data, bvm_address, step1_filter, wen, ready_3_3, step2_input, c0.step2_idx, quad_select, dom_data);
+   $monitor("[%0t] %d %d %d [%x %6d] [%d %6d] [%x %6d] %d %d %d %d [%d %d %d %d] %d [%d %d %d %x : %d %x %d] [%d %d %d]", $time, reset, i, j, dim_address, dim_data, c0.step, bvm_data, bvm_address, step1_filter, wen, ready_3_3, step2_input, quad_select, step2_input, step2_filter, step2_acc, step2_output, dom_data, c0.store_look_ahead_filter, c0.look_ahead_filter_addr, c0.look_ahead_lower_addr, c0.bvm_address, store_la_filter, la_filter_addr, la_reg_out, c0.layer, c0.next_step2_idx_lower_nibble, c0.step2_idx);
 end
 
 endmodule
