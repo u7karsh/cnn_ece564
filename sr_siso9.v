@@ -1,3 +1,13 @@
+/*H**********************************************************************
+* FILENAME    :       sr_siso9.v 
+* DESCRIPTION :       9 Reg Serial In Serial Out with rotate unit
+*
+* AUTHOR      :       Utkarsh Mathur           START DATE :    14 Oct 17
+*
+* CHANGES :
+*
+*H***********************************************************************/
+
 // Serial in serial out shift register
 module sr_siso9
 #( parameter bus_width = 16 )

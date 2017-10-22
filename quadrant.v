@@ -1,7 +1,17 @@
-// synposys translate_off
-//`include "/afs/eos.ncsu.edu/dist/syn2013.03/dw/sim_ver/DW02_mac.v"
+/*H**********************************************************************
+* FILENAME    :       quadrant.v 
+* DESCRIPTION :       Compute unit that works on 6x6 matrix
+*
+* AUTHOR      :       Utkarsh Mathur           START DATE :    14 Oct 17
+*
+* CHANGES :
+*
+*H***********************************************************************/
 
+// synposys translate_off
+`include "/afs/eos.ncsu.edu/dist/syn2013.03/dw/sim_ver/DW02_mac.v"
 // synposys translate_on
+
 module quadrant( 
    input  clock, 
    input  clear, 
@@ -15,7 +25,7 @@ wire [31:0] data_in;
 wire [31:0] mac;
 reg  [31:0] data_out_wo_truncate;
 
-assign tc   = 1'b1;
+assign tc           = 1'b1;
 assign data_out_msw = data_out_wo_truncate[31:16];
 
 always@(posedge clock) begin //{

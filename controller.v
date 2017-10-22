@@ -1,3 +1,14 @@
+/*H**********************************************************************
+* FILENAME    :       controller.v 
+* DESCRIPTION :       Control logic for entire CNN project. Includes address
+*                     generation, control signals
+*
+* AUTHOR      :       Utkarsh Mathur           START DATE :    14 Oct 17
+*
+* CHANGES :
+*
+*H***********************************************************************/
+
 module controller( 
    input  wire       clock,         // Posedge sampling event
    input  wire       reset,         // Synchronous active high
