@@ -1,5 +1,5 @@
 // synposys translate_off
-`include "/afs/eos.ncsu.edu/dist/syn2013.03/dw/sim_ver/DW02_mac.v"
+//`include "/afs/eos.ncsu.edu/dist/syn2013.03/dw/sim_ver/DW02_mac.v"
 
 // synposys translate_on
 module quadrant( 
@@ -7,17 +7,20 @@ module quadrant(
    input  clear, 
    input  wire[15:0] a, 
    input  wire[15:0] b, 
-   output reg [31:0] data_out_wo_truncate
+   output wire[15:0] data_out_msw
 );
 
 wire        tc;
 wire [31:0] data_in;
 wire [31:0] mac;
+reg  [31:0] data_out_wo_truncate;
 
 assign tc   = 1'b1;
+assign data_out_msw = data_out_wo_truncate[31:16];
 
-always@(posedge clock)
+always@(posedge clock) begin //{
    data_out_wo_truncate <= mac;
+end //}
 
 // Reset logic
 assign data_in = ( clear ) ? 32'b0 : data_out_wo_truncate;

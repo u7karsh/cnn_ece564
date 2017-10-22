@@ -45,8 +45,8 @@ reg  [1:0]  subblock;
 
 
 wire [15:0] out_3_3;
-reg  [31:0] out_3_3_uncut;
-wire [31:0] out0, out1, out2, out3;
+reg  [15:0] out_3_3_uncut;
+wire [15:0] out0, out1, out2, out3;
 wire [15:0] reg_read_data;
 reg  [15:0] step2_input_stasher;
 wire [15:0] step2_input;
@@ -57,7 +57,7 @@ wire [31:0] step2_output;
 // Truncate
 assign dom_data_unreg= ( step2_output[31] ) ? 16'b0 : step2_output[31:16];
 assign step2_filter  = |{quad_select, subblock} ? bvm_data : la_reg_out;
-assign out_3_3       = out_3_3_uncut[31] ? 16'b0 : out_3_3_uncut[31:16];
+assign out_3_3       = out_3_3_uncut[15] ? 16'b0 : out_3_3_uncut;
 assign step2_input   = ready_3_3 ? out_3_3 : step2_input_stasher;
 
 // Interface register *mandatory*
@@ -111,34 +111,30 @@ controller c0( .clock(clock), .reset(reset), .go(go), .finish(finish_unreg), .i(
 sr_siso9   #(.bus_width(16)) s0 ( .clock(clock), .wen(wen), .write_bus(bvm_data), .read_bus(reg_read_data) );
 
 // 4 Quadrants
-quadrant   q0( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_wo_truncate(out0) );
-quadrant   q1( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_wo_truncate(out1) );
-quadrant   q2( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_wo_truncate(out2) );
-quadrant   q3( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_wo_truncate(out3) );
+quadrant   q0( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_msw(out0) );
+quadrant   q1( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_msw(out1) );
+quadrant   q2( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_msw(out2) );
+quadrant   q3( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_msw(out3) );
 
 // Step2 MAC
 DW02_mac #( .A_width(16), .B_width(16) ) step2 ( .A(step2_input), .B(step2_filter), .C(step2_acc), .MAC(step2_output), .TC(1'b1) );
 
-sr_siso9   #(.bus_width(32)) s1 ( .clock(clock), .wen(1'b1), .write_bus(step2_reg_input), .read_bus(step2_acc) );
+sr_siso92   #(.bus_width(32)) s1 ( .clock(clock), .wen(1'b1), .write_bus(step2_reg_input), .read_bus(step2_acc) );
 
-register_file_9x16 r0 ( .clock(clock), .wen(store_la_filter), .address({1'b0,la_filter_addr}), .write_bus(bvm_data), .read_bus(la_reg_out) );
+//register_file_9x16 r0 ( .clock(clock), .wen(store_la_filter), .address({1'b0,la_filter_addr}), .write_bus(bvm_data), .read_bus(la_reg_out) );
 
 //initial begin
-//   $monitor("[%0t] %d %d %d [%x %6d] [%d %6d] [%x %6d] %d %d %d %d [%d %d %d %d] %d [%d %d %d %x : %d %x %d] [%d %d %d]", $time, reset, i, j, dim_address, dim_data, c0.step, bvm_data, bvm_address, step1_filter, wen, ready_3_3, step2_input, quad_select, step2_input, step2_filter, step2_acc, step2_output, dom_data_unreg, c0.store_look_ahead_filter, c0.look_ahead_filter_addr, c0.look_ahead_lower_addr, c0.bvm_address, store_la_filter, la_filter_addr, la_reg_out, c0.layer, c0.next_step2_idx_lower_nibble, c0.step2_idx);
+//   $monitor("[%0t] %d %d %d %d [%x %6d] [%d %6d] [%x %6d] %d %d %d [%d %d %d %d %d] [%d %d %d %x : %d %x %d] [%d %d %d] [%d %d %d %d] [%d %d %d]", $time, reset,go, i, j, 
+//      dim_address, dim_data, 
+//      c0.step, bvm_data, 
+//      bvm_address, step1_filter, 
+//      wen, ready_3_3, quad_select, 
+//      step2_input, step2_filter, step2_acc, step2_output, step2_reg_input, 
+//      c0.store_look_ahead_filter, c0.look_ahead_filter_addr, c0.look_ahead_lower_addr, c0.bvm_address, 
+//      // :
+//      store_la_filter, la_filter_addr, la_reg_out, 
+//      c0.layer, c0.next_step2_idx_lower_nibble, c0.step2_idx, 
+//      c0.process_started, c0.go, c0.next_layer[2], c0.finish, 
+//      dom_address, dom_data, dom_ready);
 //end
-
-initial begin
-   $monitor("[%0t] %d %d %d %d [%x %6d] [%d %6d] [%x %6d] %d %d %d [%d %d %d %d %d] [%d %d %d %x : %d %x %d] [%d %d %d] [%d %d %d %d] [%d %d %d]", $time, reset,go, i, j, 
-      dim_address, dim_data, 
-      c0.step, bvm_data, 
-      bvm_address, step1_filter, 
-      wen, ready_3_3, quad_select, 
-      step2_input, step2_filter, step2_acc, step2_output, step2_reg_input, 
-      c0.store_look_ahead_filter, c0.look_ahead_filter_addr, c0.look_ahead_lower_addr, c0.bvm_address, 
-      // :
-      store_la_filter, la_filter_addr, la_reg_out, 
-      c0.layer, c0.next_step2_idx_lower_nibble, c0.step2_idx, 
-      c0.process_started, c0.go, c0.next_layer[2], c0.finish, 
-      dom_address, dom_data, dom_ready);
-end
 endmodule
