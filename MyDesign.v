@@ -7,35 +7,35 @@ module MyDesign (
             //---------------------------------------------------------------------------
             // Control
             //
-            output reg                  dut__xxx__finish   ,
+            output wire                 dut__xxx__finish   ,
             input  wire                 xxx__dut__go       ,  
 
             //---------------------------------------------------------------------------
             // b-vector memory 
             //
-            output reg  [ 9:0]          dut__bvm__address  ,
+            output wire  [ 9:0]         dut__bvm__address  ,
             output wire                 dut__bvm__enable   ,
             output wire                 dut__bvm__write    ,
-            output reg  [15:0]          dut__bvm__data     ,  // write data
+            output wire [15:0]          dut__bvm__data     ,  // write data
             input  wire [15:0]          bvm__dut__data     ,  // read data
             
             //---------------------------------------------------------------------------
             // Input data memory 
             //
-            output reg  [ 8:0]          dut__dim__address  ,
+            output wire [ 8:0]          dut__dim__address  ,
             output wire                 dut__dim__enable   ,
             output wire                 dut__dim__write    ,
-            output reg  [15:0]          dut__dim__data     ,  // write data
+            output wire [15:0]          dut__dim__data     ,  // write data
             input  wire [15:0]          dim__dut__data     ,  // read data
 
 
             //---------------------------------------------------------------------------
             // Output data memory 
             //
-            output reg  [ 2:0]          dut__dom__address  ,
-            output reg  [15:0]          dut__dom__data     ,  // write data
+            output wire [ 2:0]          dut__dom__address  ,
+            output wire [15:0]          dut__dom__data     ,  // write data
             output wire                 dut__dom__enable   ,
-            output reg                  dut__dom__write    ,
+            output wire                 dut__dom__write    ,
 
 
             //-------------------------------
@@ -61,7 +61,8 @@ module MyDesign (
   assign dut__dim__write  = 0;
   assign dut__dom__enable = 1;
 
-  cnn u1( 
+  cnn  #(.ARCH_SELECTOR(0))
+  u1( 
      .clock(clk), 
      .reset(reset), 
      .go(xxx__dut__go), 

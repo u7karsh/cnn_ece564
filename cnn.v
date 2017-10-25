@@ -23,6 +23,16 @@ module cnn(
    output reg        dom_ready
 );
 
+// Architecture selector
+// 0 => simple         : Gives all outputs in 12*12 + 8 cycles
+// 1 => max_throughput : Adds an SISO which stores m vectors in last 8 dummy
+//                       cycles. Gives 1st output in 12*12 + 8 cycles then
+//                       subsequent ones in 12*12 cycles at the cost of
+//                       9 16bit registers
+
+// synopsys template
+parameter ARCH_SELECTOR = 0;
+
 // Interface signals
 reg  [15:0] dim_data;
 reg  [15:0] bvm_data;
@@ -67,13 +77,24 @@ wire [31:0] step2_output;
 reg  [15:0] out_3_3_uncut;
 reg  [15:0] step2_input_stasher;
 reg  [31:0] step2_reg_input;
+wire        write_partial_sum_step2;
 
 // Truncate
-assign dom_data_unreg = ( step2_output[31] )     ? 16'b0    : step2_output[31:16];
-assign step2_filter   = |{quad_select, subblock} ? bvm_data : la_reg_out;
-assign out_3_3        = out_3_3_uncut[15]        ? 16'b0    : out_3_3_uncut;
-assign step2_input    = ready_3_3                ? out_3_3  : step2_input_stasher;
-assign step1_filter   = wen                      ? bvm_data : reg_read_data;
+assign dom_data_unreg          = ( step2_output[31] )     ? 16'b0    : step2_output[31:16];
+assign out_3_3                 = out_3_3_uncut[15]        ? 16'b0    : out_3_3_uncut;
+assign step2_input             = ready_3_3                ? out_3_3  : step2_input_stasher;
+assign step1_filter            = wen                      ? bvm_data : reg_read_data;
+
+generate
+   if     ( ARCH_SELECTOR == 0 ) begin : gen_step_filter_partial_sum //{
+      assign step2_filter            = bvm_data;
+      assign write_partial_sum_step2 = (quad_select==0 & subblock==0 && layer!=0) ? 1'b0     : 1'b1;
+   end //}
+   else if( ARCH_SELECTOR == 1 ) begin : gen_step_filter_partial_sum //{
+      assign step2_filter            = |{quad_select, subblock} ? bvm_data : la_reg_out;
+      assign write_partial_sum_step2 = 1'b1;
+   end //}
+endgenerate
 
 // Interface register *mandatory*
 always@(posedge clock) begin //{
@@ -120,7 +141,8 @@ always@(*) begin //{
 end //}
 
 // Instantiate the controller
-controller c0( 
+controller #(.ARCH_SELECTOR(ARCH_SELECTOR))
+c0( 
    .clock(clock), 
    .reset(reset), 
    .go(go), 
@@ -138,9 +160,6 @@ controller c0(
    .subblock(subblock_unreg) 
 );
 
-// B vector ROT SISO
-sr_siso9   #(.bus_width(16)) s0 ( .clock(clock), .wen(wen), .write_bus(bvm_data), .read_bus(reg_read_data) );
-
 // 4 Quadrants
 quadrant   q0( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_msw(out0) );
 quadrant   q1( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_msw(out1) );
@@ -150,19 +169,33 @@ quadrant   q3( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter),
 // Step2 MAC
 DW02_mac #( .A_width(16), .B_width(16) ) step2 ( .A(step2_input), .B(step2_filter), .C(step2_acc), .MAC(step2_output), .TC(1'b1) );
 
-// O vector SISO for step 2 accumulators
-sr_siso92   #(.bus_width(32)) s1 ( .clock(clock), .wen(1'b1), .write_bus(step2_reg_input), .read_bus(step2_acc) );
+// B vector ROT SISO
+sr_siso9 #(.BUS_WIDTH(16)) s0 ( .clock(clock), .wen(wen), .write_bus(bvm_data), .read_bus(reg_read_data) );
 
-// Reg file for M vector: used only in max_throughput architecture
-register_file_9x16 r0 ( .clock(clock), .wen(store_la_filter), .address({1'b0,la_filter_addr}), .write_bus(bvm_data), .read_bus(la_reg_out) );
+// O vector SISO for step 2 accumulators
+sr_siso9 #(.BUS_WIDTH(32)) s1 ( .clock(clock), .wen(write_partial_sum_step2), .write_bus(step2_reg_input), .read_bus(step2_acc) );
+
+generate
+   if( ARCH_SELECTOR == 1 ) begin : gen_la_filter_regfile //{
+      // Reg file for M vector: used only in max_throughput architecture
+      register_file_9x16 r0 ( 
+         .clock(clock), 
+         .wen(store_la_filter),
+         .address({1'b0,la_filter_addr}), 
+         .write_bus(bvm_data), 
+         .read_bus(la_reg_out) 
+      );
+   end //}
+endgenerate
 
 //initial begin
-//   $monitor("[%0t] %d %d %d %d [%x %6d] [%d %6d] [%x %6d] %d %d %d [%d %d %d %d %d] [%d %d %d %x : %d %x %d] [%d %d %d] [%d %d %d %d] [%d %d %d]", $time, reset,go, i, j, 
+//   $monitor("[%0t] %d %d %d %d [%x %6d] [%d %6d] [%x %6d] %d %d %d [%d %d %d %d %d] [%d %d %d %x : %d %x %d] [%d %d %d] [%d %d %d %d] [%d %d %d]", 
+//      $time, reset,go, i, j, 
 //      dim_address, dim_data, 
 //      c0.step, bvm_data, 
 //      bvm_address, step1_filter, 
 //      wen, ready_3_3, quad_select, 
-//      step2_input, step2_filter, step2_acc, step2_output, step2_reg_input, 
+//      step2_input, step2_filter, step2_acc, step2_output, step2_reg_input,
 //      c0.store_look_ahead_filter, c0.look_ahead_filter_addr, c0.look_ahead_lower_addr, c0.bvm_address, 
 //      // :
 //      store_la_filter, la_filter_addr, la_reg_out, 
@@ -170,4 +203,5 @@ register_file_9x16 r0 ( .clock(clock), .wen(store_la_filter), .address({1'b0,la_
 //      c0.process_started, c0.go, c0.next_layer[2], c0.finish, 
 //      dom_address, dom_data, dom_ready);
 //end
+
 endmodule

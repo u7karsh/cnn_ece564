@@ -28,6 +28,16 @@ module controller(
    output reg  [1:0] subblock //TODO
 ); //{
 
+// Architecture selector
+// 0 => simple         : Gives all outputs in 12*12 + 8 cycles
+// 1 => max_throughput : Adds an SISO which stores m vectors in last 8 dummy
+//                       cycles. Gives 1st output in 12*12 + 8 cycles then
+//                       subsequent ones in 12*12 cycles at the cost of
+//                       9 16bit registers
+
+// synopsys template
+parameter ARCH_SELECTOR = 0;
+
 //----------------------- INTERNAL SIGNALS BEGINS -----------------------------
 // Registers 
 reg        inc_sub_quad_row;
@@ -53,6 +63,11 @@ reg  [3:0] step;
 reg  [3:0] step_reg;
 reg  [5:0] look_ahead_lower_addr;
 reg        next_process_started, process_started;
+
+// Signals specifically to incorporate arch0
+wire       arch0_add_skip_next;
+reg        arch0_add_skip;
+reg        next_sub_quad_overflow;
 //----------------------- INTERNAL SIGNALS ENDS -------------------------------
 
 // i,j index vars to be fed as address
@@ -62,7 +77,19 @@ reg        next_process_started, process_started;
 assign i                       = partial_i + {2'b00, sub_quad_row};
 assign j                       = partial_j + {2'b00, sub_quad_col};
 assign wen_next                = &(~{quad_select_int, sub_quad_select});
-assign store_look_ahead_filter = quad_select_int[1] & next_quad_row[2];
+
+generate
+   if     ( ARCH_SELECTOR == 0 ) begin : gen_look_ahead_add_skip //{
+      assign store_look_ahead_filter = 1'b0;
+      assign arch0_add_skip_next     = ( &{new_3b, sub_quad_select[1:0], quad_select_int[1:0]} ) ? ~arch0_add_skip : arch0_add_skip;
+   end //}
+   else if( ARCH_SELECTOR == 1 ) begin : gen_look_ahead_add_skip //{
+      assign store_look_ahead_filter = quad_select_int[1] & next_quad_row[2];
+      assign arch0_add_skip_next     = 1'b0;
+   end //}
+endgenerate
+
+
 assign look_ahead_filter_addr  = {quad_select_int[0], sub_quad_select};
 
 //---------------------------- SYNC LOGIC BEGINS ------------------------------
@@ -74,6 +101,7 @@ always@( posedge clock ) begin //{
       {new_3b, sub_quad_row}  <= 3'b100;
       layer                   <= 0;
       finish                  <= 1;
+      arch0_add_skip          <= 0;
    end //}
    else begin //{
       // Following signals are synced with i, j or address calculating logic
@@ -82,9 +110,11 @@ always@( posedge clock ) begin //{
       sub_quad_col            <= next_quad_col;
       {new_3b, sub_quad_row}  <= next_quad_row;
       sub_quad_select         <= next_sub_quad_select[1:0];
+      next_sub_quad_overflow  <= next_sub_quad_select[2];
       layer                   <= next_layer[1:0];
       quad_select_int         <= next_quad_select[1:0];
       finish                  <= next_layer[2];
+      arch0_add_skip          <= arch0_add_skip_next;
    end //}
 
 
@@ -192,15 +222,29 @@ always@(*) begin //{
 end //}
 
 // b vector address decoding logic
-always@(*) begin //{
-   casex( {wen_next, store_look_ahead_filter} )
-      2'b10: bvm_address = {4'b0000, layer, step};
-      //TODO
-      2'b00: bvm_address = 10'h40 + {step, step2_idx};
-      2'bx1: bvm_address = 10'h40 + {1'b0, look_ahead_filter_addr, look_ahead_lower_addr};
-   endcase
-end //}
-
+generate
+   if     ( ARCH_SELECTOR == 0 ) begin : gen_b_address //{
+      always@(*) begin //{
+         casex( {wen_next, store_look_ahead_filter} )
+            2'b10: bvm_address = {4'b0000, layer, step};
+            //TODO
+            2'b00: bvm_address = ( &{sub_quad_select[1:0], quad_select_int[1:0], ~arch0_add_skip_next} ? 10'h41 : 10'h40) + 
+                                 {step, step2_idx};
+            2'bx1: bvm_address = 10'h40 + {1'b0, look_ahead_filter_addr, look_ahead_lower_addr};
+         endcase
+      end //}
+   end //}
+   else if( ARCH_SELECTOR == 1 ) begin : gen_b_address //{
+      always@(*) begin //{
+         casex( {wen_next, store_look_ahead_filter} )
+            2'b10: bvm_address = {4'b0000, layer, step};
+            //TODO
+            2'b00: bvm_address = 10'h40 + {step, step2_idx};
+            2'bx1: bvm_address = 10'h40 + {1'b0, look_ahead_filter_addr, look_ahead_lower_addr};
+         endcase
+      end //}
+   end //}
+endgenerate
 always@(*) begin //{
    case( layer )
       2'd0 : look_ahead_lower_addr = 6'h0F;
@@ -256,15 +300,16 @@ always@(*) begin //{
       4'b1xxx: next_process_started = 1'b0;
 
       4'b0x10: next_process_started = 1'b1;
+      4'b0100: next_process_started = 1'b1;
    endcase
 end //}
 
 always@(*)
-   add_one_2bit( {next_quad_row[2], sub_quad_select}, next_sub_quad_select );
+   add_one_2bit( { ~arch0_add_skip_next & next_quad_row[2], sub_quad_select}, next_sub_quad_select );
 
 // Add one to quad_select_int
 always@(*)
-   add_one_2bit( {next_sub_quad_select[2], quad_select_int}, next_quad_select );
+   add_one_2bit( { next_sub_quad_select[2], quad_select_int}, next_quad_select );
 
 // Add one to layer
 always@(*)

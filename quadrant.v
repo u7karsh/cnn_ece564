@@ -8,9 +8,9 @@
 *
 *H***********************************************************************/
 
-// synposys translate_off
+// synopsys translate_off
 `include "/afs/eos.ncsu.edu/dist/syn2013.03/dw/sim_ver/DW02_mac.v"
-// synposys translate_on
+// synopsys translate_on
 
 module quadrant( 
    input  clock, 
