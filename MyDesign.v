@@ -61,7 +61,7 @@ module MyDesign (
   assign dut__dim__write  = 0;
   assign dut__dom__enable = 1;
 
-  cnn  #(.ARCH_SELECTOR(0))
+  cnn  #(.ARCH_SELECTOR(0), .MULT_SQUEEZE(1))
   u1( 
      .clock(clk), 
      .reset(reset), 

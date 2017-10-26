@@ -14,27 +14,26 @@
 
 module quadrant( 
    input  clock, 
-   input  clear, 
+   input  wire       sample_acc,
+   input  wire[31:0] acc_in, 
    input  wire[15:0] a, 
    input  wire[15:0] b, 
-   output wire[15:0] data_out_msw
+   output wire[31:0] data_out_wo_truncate
 );
 
 wire        tc;
 wire [31:0] data_in;
-wire [31:0] mac;
-reg  [31:0] data_out_wo_truncate;
+reg  [31:0] mac;
 
 assign tc           = 1'b1;
-assign data_out_msw = data_out_wo_truncate[31:16];
 
 always@(posedge clock) begin //{
-   data_out_wo_truncate <= mac;
+   mac             <= data_out_wo_truncate;
 end //}
 
 // Reset logic
-assign data_in = ( clear ) ? 32'b0 : data_out_wo_truncate;
+assign data_in = ( sample_acc ) ? acc_in : mac;
 
-DW02_mac #( .A_width(16), .B_width(16) ) mac0 ( .A(a), .B(b), .C(data_in), .MAC(mac), .TC(tc) );
+DW02_mac #( .A_width(16), .B_width(16) ) mac0 ( .A(a), .B(b), .C(data_in), .MAC(data_out_wo_truncate), .TC(tc) );
 
 endmodule

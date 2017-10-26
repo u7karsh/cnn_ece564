@@ -33,6 +33,9 @@ module cnn(
 // synopsys template
 parameter ARCH_SELECTOR = 0;
 
+// synopsys template
+parameter MULT_SQUEEZE  = 0;
+
 // Interface signals
 reg  [15:0] dim_data;
 reg  [15:0] bvm_data;
@@ -62,7 +65,6 @@ reg  [1:0]  subblock;
 wire [15:0] dom_data_unreg;
 wire [15:0] step2_filter;
 wire [15:0] out_3_3;
-wire [15:0] step2_input;
 wire [15:0] step1_filter;
 
 // Internal signals
@@ -70,19 +72,25 @@ wire [15:0] la_reg_out;
 wire [2:0]  dom_address_unreg;
 wire        dom_ready_unreg;
 wire [31:0] step2_acc;
-wire [15:0] out0, out1, out2, out3;
+wire [31:0] out0, out1, out2, out3;
 wire [15:0] reg_read_data;
-wire [31:0] step2_output;
+
+reg  [31:0] step2_output;
 
 reg  [15:0] out_3_3_uncut;
-reg  [15:0] step2_input_stasher;
+reg  [15:0] step2_input;
 reg  [31:0] step2_reg_input;
 wire        write_partial_sum_step2;
+
+// Addon wires to incorporate MULT_SQUEEZE
+wire        q0_ready_3_3, q1_ready_3_3, q2_ready_3_3, q3_ready_3_3;
+wire [15:0] q0_a, q1_a, q2_a, q3_a;
+wire [15:0] q0_b, q1_b, q2_b, q3_b;
+wire [31:0] q0_acc_in, q1_acc_in, q2_acc_in, q3_acc_in;
 
 // Truncate
 assign dom_data_unreg          = ( step2_output[31] )     ? 16'b0    : step2_output[31:16];
 assign out_3_3                 = out_3_3_uncut[15]        ? 16'b0    : out_3_3_uncut;
-assign step2_input             = ready_3_3                ? out_3_3  : step2_input_stasher;
 assign step1_filter            = wen                      ? bvm_data : reg_read_data;
 
 generate
@@ -118,17 +126,16 @@ always@(posedge clock) begin //{
    subblock          <= subblock_unreg;
    finish            <= finish_unreg;
 
-   if( ready_3_3 )
-      step2_input_stasher   <= out_3_3;
+   step2_input       <= ready_3_3_unreg ? out_3_3 : step2_input;
 end //}
 
 // Mux to select output from the correct quadrant
 always@(*) begin //{
    case( quad_select )
-      2'd0: out_3_3_uncut  = out0;
-      2'd1: out_3_3_uncut  = out1;
-      2'd2: out_3_3_uncut  = out2;
-      2'd3: out_3_3_uncut  = out3;
+      2'd0: out_3_3_uncut  = out0[31:16];
+      2'd1: out_3_3_uncut  = out1[31:16];
+      2'd2: out_3_3_uncut  = out2[31:16];
+      2'd3: out_3_3_uncut  = out3[31:16];
    endcase
 end //}
 
@@ -160,14 +167,79 @@ c0(
    .subblock(subblock_unreg) 
 );
 
-// 4 Quadrants
-quadrant   q0( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_msw(out0) );
-quadrant   q1( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_msw(out1) );
-quadrant   q2( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_msw(out2) );
-quadrant   q3( .clock(clock), .clear(ready_3_3), .a(dim_data), .b(step1_filter), .data_out_msw(out3) );
+generate
+   if( MULT_SQUEEZE == 0 ) begin : gen_quad_inputs //{
+      assign q0_ready_3_3 = ready_3_3; 
+      assign q1_ready_3_3 = ready_3_3; 
+      assign q2_ready_3_3 = ready_3_3; 
+      assign q3_ready_3_3 = ready_3_3; 
+
+      assign q0_acc_in    = 32'h0;
+      assign q1_acc_in    = 32'h0;
+      assign q2_acc_in    = 32'h0;
+      assign q3_acc_in    = 32'h0;
+
+      assign q0_a         = dim_data;
+      assign q1_a         = dim_data;
+      assign q2_a         = dim_data;
+      assign q3_a         = dim_data;
+
+      assign q0_b         = step1_filter;
+      assign q1_b         = step1_filter;
+      assign q2_b         = step1_filter;
+      assign q3_b         = step1_filter;
+   end //}
+   else if( MULT_SQUEEZE == 1 ) begin : gen_quad_inputs //{
+      assign q0_ready_3_3 = ( quad_select == 0 ) ? ready_3_3 : 1'b1; 
+      assign q1_ready_3_3 = ( quad_select == 1 ) ? ready_3_3 : 1'b1; 
+      assign q2_ready_3_3 = ( quad_select == 2 ) ? ready_3_3 : 1'b1; 
+      assign q3_ready_3_3 = ( quad_select == 3 ) ? ready_3_3 : 1'b1; 
+
+      assign q0_acc_in    = ( quad_select == 0 ) ? 32'h0 : step2_acc;
+      assign q1_acc_in    = ( quad_select == 1 ) ? 32'h0 : step2_acc;
+      assign q2_acc_in    = ( quad_select == 2 ) ? 32'h0 : step2_acc;
+      assign q3_acc_in    = ( quad_select == 3 ) ? 32'h0 : step2_acc;
+
+      assign q0_a         = ( quad_select == 0 ) ? dim_data : step2_input;
+      assign q1_a         = ( quad_select == 1 ) ? dim_data : step2_input;
+      assign q2_a         = ( quad_select == 2 ) ? dim_data : step2_input;
+      assign q3_a         = ( quad_select == 3 ) ? dim_data : step2_input;
+
+      assign q0_b         = ( quad_select == 0 ) ? step1_filter : step2_filter;
+      assign q1_b         = ( quad_select == 1 ) ? step1_filter : step2_filter;
+      assign q2_b         = ( quad_select == 2 ) ? step1_filter : step2_filter;
+      assign q3_b         = ( quad_select == 3 ) ? step1_filter : step2_filter;
+   end //}
+endgenerate
 
 // Step2 MAC
-DW02_mac #( .A_width(16), .B_width(16) ) step2 ( .A(step2_input), .B(step2_filter), .C(step2_acc), .MAC(step2_output), .TC(1'b1) );
+generate
+   if     ( MULT_SQUEEZE == 0 ) begin : gen_step2_mac //{
+      quadrant   step2( .clock(clock), 
+                        .sample_acc(1'b1), 
+                        .acc_in(step2_acc), 
+                        .a(step2_input), 
+                        .b(step2_filter), 
+                        .data_out_wo_truncate(step2_output) 
+                     );
+   end //}
+   else if( MULT_SQUEEZE == 1 ) begin : gen_step2_mac //{
+      always@(*) begin //{
+         case(quad_select) //{
+            0: step2_output = out1;
+            1: step2_output = out2;
+            2: step2_output = out3;
+            3: step2_output = out0;
+         endcase //}
+      end //}
+   end //}
+endgenerate
+
+// 4 Quadrants
+quadrant   q0( .clock(clock), .sample_acc(q0_ready_3_3), .acc_in(q0_acc_in), .a(q0_a), .b(q0_b), .data_out_wo_truncate(out0) );
+quadrant   q1( .clock(clock), .sample_acc(q1_ready_3_3), .acc_in(q1_acc_in), .a(q1_a), .b(q1_b), .data_out_wo_truncate(out1) );
+quadrant   q2( .clock(clock), .sample_acc(q2_ready_3_3), .acc_in(q2_acc_in), .a(q2_a), .b(q2_b), .data_out_wo_truncate(out2) );
+quadrant   q3( .clock(clock), .sample_acc(q3_ready_3_3), .acc_in(q3_acc_in), .a(q3_a), .b(q3_b), .data_out_wo_truncate(out3) );
 
 // B vector ROT SISO
 sr_siso9 #(.BUS_WIDTH(16)) s0 ( .clock(clock), .wen(wen), .write_bus(bvm_data), .read_bus(reg_read_data) );
