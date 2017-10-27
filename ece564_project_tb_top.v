@@ -708,17 +708,17 @@ class generator;
               begin
                 tmp_dom_addr = DutIfc.cb_test.dut__dom__address ;
                 tmp_dom_data = DutIfc.cb_test.dut__dom__data    ;
-                //$display("@%t: INFO: Output Memory Write, addr=%h", $time, tmp_dom_addr);
-                //$display("@%t: INFO: Output Value for element {%0d} = %h", $time, tmp_dom_addr, tmp_dom_data);
+                $display("@%t: INFO: Output Memory Write, addr=%h", $time, tmp_dom_addr);
+                $display("@%t: INFO: Output Value for element {%0d} = %h", $time, tmp_dom_addr, tmp_dom_data);
                 if (($signed(tmp_dom_data)  >  op.outputArray[tmp_dom_addr]+op.tolerance) | ($signed(tmp_dom_data)  <  op.outputArray[tmp_dom_addr]-op.tolerance))
                   begin
                     op.outputStatus[tmp_dom_addr] = 1'b0 ;
-                    //$display("@%t: ERROR: Output Memory Write, writing %h, expecting %h, tolerance = %0d, output status=%8b", $time, tmp_dom_data, op.outputArray[tmp_dom_addr], op.tolerance, op.outputStatus);
+                    $display("@%t: ERROR: Output Memory Write, writing %h, expecting %h, tolerance = %0d, output status=%8b", $time, tmp_dom_data, op.outputArray[tmp_dom_addr], op.tolerance, op.outputStatus);
                   end
                 else
                   begin
                     op.outputStatus[tmp_dom_addr] = 1'b1 ;
-                    //$display("@%t: PASS: Output Memory Write, writing %h, expecting %h, output status=%8b", $time, tmp_dom_data, op.outputArray[tmp_dom_addr], op.outputStatus);
+                    $display("@%t: PASS: Output Memory Write, writing %h, expecting %h, output status=%8b", $time, tmp_dom_data, op.outputArray[tmp_dom_addr], op.outputStatus);
                   end
               end
           end
@@ -861,35 +861,7 @@ module tb_top ();
   parameter CLK_PHASE=5  ;
 
   //---------------------------------------------------------------------------
-  // b-vector memory 
-  wire [ 9:0]          dut__bvm__address  ;
-  wire [15:0]          dut__bvm__data     ;  // write data
-  wire [15:0]          bvm__dut__data     ;  // read data
-  wire                 dut__bvm__enable   ;
-  wire                 dut__bvm__write    ;
-
-  //---------------------------------------------------------------------------
-  // Input data memory 
-  wire [ 8:0]          dut__dim__address  ;
-  wire [15:0]          dut__dim__data     ;  // write data
-  wire [15:0]          dim__dut__data     ;  // read data
-  wire                 dut__dim__enable   ;
-  wire                 dut__dim__write    ;
-
-  //---------------------------------------------------------------------------
-  // Output data memory 
-  wire [ 2:0]          dut__dom__address  ;
-  wire [15:0]          dut__dom__data     ;  // write data
-  wire                 dut__dom__enable   ;
-  wire                 dut__dom__write    ;
-
-  //---------------------------------------------------------------------------
-  // General
-  //
   reg      clk              ;
-  wire     reset            ;
-  reg      xxx__dut__go     ;
-  wire     dut__xxx__finish ;
 
 
   //---------------------------------------------------------------------------

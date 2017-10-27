@@ -13,7 +13,7 @@
 // synopsys translate_on
 
 module quadrant( 
-   input  clock, 
+   input  wire       clock, 
    input  wire       sample_acc,
    input  wire[31:0] acc_in, 
    input  wire[15:0] a, 

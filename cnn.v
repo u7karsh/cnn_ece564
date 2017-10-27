@@ -24,7 +24,7 @@ module cnn(
 );
 
 // Architecture selector
-// 0 => simple         : Gives all outputs in 12*12 + 8 cycles
+// 0 => simple         : Gives all outputs in 12*12 + 36 cycles
 // 1 => max_throughput : Adds an SISO which stores m vectors in last 8 dummy
 //                       cycles. Gives 1st output in 12*12 + 8 cycles then
 //                       subsequent ones in 12*12 cycles at the cost of
@@ -75,12 +75,20 @@ wire [31:0] step2_acc;
 wire [31:0] out0, out1, out2, out3;
 wire [15:0] reg_read_data;
 
-reg  [31:0] step2_output;
 
 reg  [15:0] out_3_3_uncut;
 reg  [15:0] step2_input;
 reg  [31:0] step2_reg_input;
 wire        write_partial_sum_step2;
+
+wire [31:0] step2_output;
+reg  [31:0] step2_output_alt;
+
+generate
+   if( MULT_SQUEEZE == 1 ) begin : gen_wire_reg_step2_output //{
+      assign step2_output = step2_output_alt;
+   end //}
+endgenerate
 
 // Addon wires to incorporate MULT_SQUEEZE
 wire        q0_ready_3_3, q1_ready_3_3, q2_ready_3_3, q3_ready_3_3;
@@ -94,11 +102,11 @@ assign out_3_3                 = out_3_3_uncut[15]        ? 16'b0    : out_3_3_u
 assign step1_filter            = wen                      ? bvm_data : reg_read_data;
 
 generate
-   if     ( ARCH_SELECTOR == 0 ) begin : gen_step_filter_partial_sum //{
+   if     ( ARCH_SELECTOR == 0 ) begin : gen_step_filter_partial_sum_1 //{
       assign step2_filter            = bvm_data;
       assign write_partial_sum_step2 = (quad_select==0 & subblock==0 && layer!=0) ? 1'b0     : 1'b1;
    end //}
-   else if( ARCH_SELECTOR == 1 ) begin : gen_step_filter_partial_sum //{
+   else if( ARCH_SELECTOR == 1 ) begin : gen_step_filter_partial_sum_2 //{
       assign step2_filter            = |{quad_select, subblock} ? bvm_data : la_reg_out;
       assign write_partial_sum_step2 = 1'b1;
    end //}
@@ -168,7 +176,7 @@ c0(
 );
 
 generate
-   if( MULT_SQUEEZE == 0 ) begin : gen_quad_inputs //{
+   if( MULT_SQUEEZE == 0 ) begin : gen_quad_inputs_1 //{
       assign q0_ready_3_3 = ready_3_3; 
       assign q1_ready_3_3 = ready_3_3; 
       assign q2_ready_3_3 = ready_3_3; 
@@ -189,32 +197,38 @@ generate
       assign q2_b         = step1_filter;
       assign q3_b         = step1_filter;
    end //}
-   else if( MULT_SQUEEZE == 1 ) begin : gen_quad_inputs //{
-      assign q0_ready_3_3 = ( quad_select == 0 ) ? ready_3_3 : 1'b1; 
-      assign q1_ready_3_3 = ( quad_select == 1 ) ? ready_3_3 : 1'b1; 
-      assign q2_ready_3_3 = ( quad_select == 2 ) ? ready_3_3 : 1'b1; 
-      assign q3_ready_3_3 = ( quad_select == 3 ) ? ready_3_3 : 1'b1; 
+   else if( MULT_SQUEEZE == 1 ) begin : gen_quad_inputs_2 //{
+      wire q0_select, q1_select, q2_select, q3_select;
+      assign q0_select    = quad_select == 0;
+      assign q1_select    = quad_select == 1;
+      assign q2_select    = quad_select == 2;
+      assign q3_select    = quad_select == 3;
 
-      assign q0_acc_in    = ( quad_select == 0 ) ? 32'h0 : step2_acc;
-      assign q1_acc_in    = ( quad_select == 1 ) ? 32'h0 : step2_acc;
-      assign q2_acc_in    = ( quad_select == 2 ) ? 32'h0 : step2_acc;
-      assign q3_acc_in    = ( quad_select == 3 ) ? 32'h0 : step2_acc;
+      assign q0_ready_3_3 = ( q0_select ) ? ready_3_3 : 1'b1; 
+      assign q1_ready_3_3 = ( q1_select ) ? ready_3_3 : 1'b1; 
+      assign q2_ready_3_3 = ( q2_select ) ? ready_3_3 : 1'b1; 
+      assign q3_ready_3_3 = ( q3_select ) ? ready_3_3 : 1'b1; 
 
-      assign q0_a         = ( quad_select == 0 ) ? dim_data : step2_input;
-      assign q1_a         = ( quad_select == 1 ) ? dim_data : step2_input;
-      assign q2_a         = ( quad_select == 2 ) ? dim_data : step2_input;
-      assign q3_a         = ( quad_select == 3 ) ? dim_data : step2_input;
+      assign q0_acc_in    = ( q0_select ) ? 32'h0 : step2_acc;
+      assign q1_acc_in    = ( q1_select ) ? 32'h0 : step2_acc;
+      assign q2_acc_in    = ( q2_select ) ? 32'h0 : step2_acc;
+      assign q3_acc_in    = ( q3_select ) ? 32'h0 : step2_acc;
 
-      assign q0_b         = ( quad_select == 0 ) ? step1_filter : step2_filter;
-      assign q1_b         = ( quad_select == 1 ) ? step1_filter : step2_filter;
-      assign q2_b         = ( quad_select == 2 ) ? step1_filter : step2_filter;
-      assign q3_b         = ( quad_select == 3 ) ? step1_filter : step2_filter;
+      assign q0_a         = ( q0_select ) ? dim_data : step2_input;
+      assign q1_a         = ( q1_select ) ? dim_data : step2_input;
+      assign q2_a         = ( q2_select ) ? dim_data : step2_input;
+      assign q3_a         = ( q3_select ) ? dim_data : step2_input;
+
+      assign q0_b         = ( q0_select ) ? step1_filter : step2_filter;
+      assign q1_b         = ( q1_select ) ? step1_filter : step2_filter;
+      assign q2_b         = ( q2_select ) ? step1_filter : step2_filter;
+      assign q3_b         = ( q3_select ) ? step1_filter : step2_filter;
    end //}
 endgenerate
 
 // Step2 MAC
 generate
-   if     ( MULT_SQUEEZE == 0 ) begin : gen_step2_mac //{
+   if     ( MULT_SQUEEZE == 0 ) begin : gen_step2_mac_1 //{
       quadrant   step2( .clock(clock), 
                         .sample_acc(1'b1), 
                         .acc_in(step2_acc), 
@@ -223,13 +237,13 @@ generate
                         .data_out_wo_truncate(step2_output) 
                      );
    end //}
-   else if( MULT_SQUEEZE == 1 ) begin : gen_step2_mac //{
+   else if( MULT_SQUEEZE == 1 ) begin : gen_step2_mac_2 //{
       always@(*) begin //{
          case(quad_select) //{
-            0: step2_output = out1;
-            1: step2_output = out2;
-            2: step2_output = out3;
-            3: step2_output = out0;
+            0: step2_output_alt = out1;
+            1: step2_output_alt = out2;
+            2: step2_output_alt = out3;
+            3: step2_output_alt = out0;
          endcase //}
       end //}
    end //}
@@ -261,7 +275,7 @@ generate
 endgenerate
 
 //initial begin
-//   $monitor("[%0t] %d %d %d %d [%x %6d] [%d %6d] [%x %6d] %d %d %d [%d %d %d %d %d] [%d %d %d %x : %d %x %d] [%d %d %d] [%d %d %d %d] [%d %d %d]", 
+//   $monitor("[%0t] %d %d %d %d [%x %6d] [%d %6d] [%x %6d] %d %d %d [%d %d %d %d %d] [%d %d %d %x : %d %x %d] [%d %d] [%d %d %d %d] [%d %d %d]", 
 //      $time, reset,go, i, j, 
 //      dim_address, dim_data, 
 //      c0.step, bvm_data, 
@@ -271,7 +285,7 @@ endgenerate
 //      c0.store_look_ahead_filter, c0.look_ahead_filter_addr, c0.look_ahead_lower_addr, c0.bvm_address, 
 //      // :
 //      store_la_filter, la_filter_addr, la_reg_out, 
-//      c0.layer, c0.next_step2_idx_lower_nibble, c0.step2_idx, 
+//      c0.layer, c0.next_step2_idx_lower_nibble, 
 //      c0.process_started, c0.go, c0.next_layer[2], c0.finish, 
 //      dom_address, dom_data, dom_ready);
 //end

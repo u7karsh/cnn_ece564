@@ -29,7 +29,7 @@ module controller(
 ); //{
 
 // Architecture selector
-// 0 => simple         : Gives all outputs in 12*12 + 8 cycles
+// 0 => simple         : Gives all outputs in 12*12 + 36 cycles
 // 1 => max_throughput : Adds an SISO which stores m vectors in last 8 dummy
 //                       cycles. Gives 1st output in 12*12 + 8 cycles then
 //                       subsequent ones in 12*12 cycles at the cost of
@@ -79,11 +79,11 @@ assign j                       = partial_j + {2'b00, sub_quad_col};
 assign wen_next                = &(~{quad_select_int, sub_quad_select});
 
 generate
-   if     ( ARCH_SELECTOR == 0 ) begin : gen_look_ahead_add_skip //{
+   if     ( ARCH_SELECTOR == 0 ) begin : gen_look_ahead_add_skip_1 //{
       assign store_look_ahead_filter = 1'b0;
       assign arch0_add_skip_next     = ( &{new_3b, sub_quad_select[1:0], quad_select_int[1:0]} ) ? ~arch0_add_skip : arch0_add_skip;
    end //}
-   else if( ARCH_SELECTOR == 1 ) begin : gen_look_ahead_add_skip //{
+   else if( ARCH_SELECTOR == 1 ) begin : gen_look_ahead_add_skip_2 //{
       assign store_look_ahead_filter = quad_select_int[1] & next_quad_row[2];
       assign arch0_add_skip_next     = 1'b0;
    end //}
@@ -139,7 +139,9 @@ always@(posedge clock) begin //{
    process_started     <= next_process_started;
    step_reg            <= step;
    dom_address         <= step_reg[2:0];
-   dom_ready           <= ~step_reg[3];
+   // Write to output only when its ready i.e., at the very last 8 clocks.
+   // Additionally write only 0-7 (not 8)
+   dom_ready           <= ~|{step_reg[3], arch0_add_skip} & (&{step2_idx[5:4], quad_select, subblock});
 end //}
 //---------------------------- SYNC LOGIC ENDS --------------------------------
 
@@ -223,18 +225,17 @@ end //}
 
 // b vector address decoding logic
 generate
-   if     ( ARCH_SELECTOR == 0 ) begin : gen_b_address //{
+   if     ( ARCH_SELECTOR == 0 ) begin : gen_b_address_1 //{
       always@(*) begin //{
-         casex( {wen_next, store_look_ahead_filter} )
-            2'b10: bvm_address = {4'b0000, layer, step};
+         casex( {wen_next} )
+            1'b1: bvm_address = {4'b0000, layer, step};
             //TODO
-            2'b00: bvm_address = ( &{sub_quad_select[1:0], quad_select_int[1:0], ~arch0_add_skip_next} ? 10'h41 : 10'h40) + 
+            1'b0: bvm_address = ( &{sub_quad_select[1:0], quad_select_int[1:0], ~arch0_add_skip_next} ? 10'h41 : 10'h40) + 
                                  {step, step2_idx};
-            2'bx1: bvm_address = 10'h40 + {1'b0, look_ahead_filter_addr, look_ahead_lower_addr};
          endcase
       end //}
    end //}
-   else if( ARCH_SELECTOR == 1 ) begin : gen_b_address //{
+   else if( ARCH_SELECTOR == 1 ) begin : gen_b_address_2 //{
       always@(*) begin //{
          casex( {wen_next, store_look_ahead_filter} )
             2'b10: bvm_address = {4'b0000, layer, step};
